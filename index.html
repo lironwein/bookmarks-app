@@ -191,6 +191,39 @@
         opacity: 0.45;
       }
 
+      .groups {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        border-bottom: 1px solid var(--line);
+        padding: 12px 18px;
+        scrollbar-width: thin;
+      }
+
+      .group-tab {
+        flex: 0 0 auto;
+        min-height: 34px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fbfcfa;
+        color: var(--muted);
+        padding: 0 12px;
+        font-size: 0.82rem;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .group-tab:hover {
+        border-color: #b8c9c2;
+        color: var(--text);
+      }
+
+      .group-tab.active {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: #ffffff;
+      }
+
       .list {
         display: grid;
         gap: 0;
@@ -331,7 +364,8 @@
             <input
               id="urlInput"
               name="url"
-              type="url"
+              type="text"
+              inputmode="url"
               placeholder="https://developer.mozilla.org"
               autocomplete="off"
               required
@@ -360,6 +394,7 @@
               Delete all
             </button>
           </div>
+          <div class="groups" id="categoryGroups" aria-label="Category groups"></div>
           <div class="list" id="bookmarkList"></div>
         </section>
       </section>
@@ -372,10 +407,12 @@
       const urlInput = document.querySelector("#urlInput");
       const categoryInput = document.querySelector("#categoryInput");
       const bookmarkList = document.querySelector("#bookmarkList");
+      const categoryGroups = document.querySelector("#categoryGroups");
       const clearAllButton = document.querySelector("#clearAllButton");
       const bookmarkCount = document.querySelector("#bookmarkCount");
 
       let bookmarks = JSON.parse(localStorage.getItem(storageKey) || "[]");
+      let activeCategory = "All";
 
       function saveBookmarks() {
         localStorage.setItem(storageKey, JSON.stringify(bookmarks));
@@ -390,10 +427,58 @@
         return `https://${trimmed}`;
       }
 
+      function createId() {
+        if (crypto.randomUUID) {
+          return crypto.randomUUID();
+        }
+
+        return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      }
+
+      function getCategories() {
+        return [
+          "All",
+          ...new Set(bookmarks.map((bookmark) => bookmark.category)),
+        ];
+      }
+
+      function renderCategoryGroups() {
+        const categories = getCategories();
+
+        if (!categories.includes(activeCategory)) {
+          activeCategory = "All";
+        }
+
+        categoryGroups.innerHTML = "";
+
+        categories.forEach((category) => {
+          const tab = document.createElement("button");
+          tab.className = "group-tab";
+          tab.type = "button";
+          tab.textContent =
+            category === "All"
+              ? `All (${bookmarks.length})`
+              : `${category} (${bookmarks.filter((bookmark) => bookmark.category === category).length})`;
+
+          if (category === activeCategory) {
+            tab.classList.add("active");
+            tab.setAttribute("aria-current", "true");
+          }
+
+          tab.addEventListener("click", () => {
+            activeCategory = category;
+            renderBookmarks();
+          });
+
+          categoryGroups.append(tab);
+        });
+      }
+
       function renderBookmarks() {
         bookmarkList.innerHTML = "";
         bookmarkCount.textContent = bookmarks.length;
         clearAllButton.disabled = bookmarks.length === 0;
+        renderCategoryGroups();
 
         if (bookmarks.length === 0) {
           const empty = document.createElement("p");
@@ -403,7 +488,20 @@
           return;
         }
 
-        bookmarks.forEach((bookmark) => {
+        const visibleBookmarks =
+          activeCategory === "All"
+            ? bookmarks
+            : bookmarks.filter((bookmark) => bookmark.category === activeCategory);
+
+        if (visibleBookmarks.length === 0) {
+          const empty = document.createElement("p");
+          empty.className = "empty";
+          empty.textContent = "No bookmarks in this category.";
+          bookmarkList.append(empty);
+          return;
+        }
+
+        visibleBookmarks.forEach((bookmark) => {
           const row = document.createElement("article");
           row.className = "bookmark";
 
@@ -444,11 +542,19 @@
       form.addEventListener("submit", (event) => {
         event.preventDefault();
 
+        const title = titleInput.value.trim();
+        const url = urlInput.value.trim();
+        const category = categoryInput.value.trim();
+
+        if (!title || !url || !category) {
+          return;
+        }
+
         bookmarks.unshift({
-          id: crypto.randomUUID(),
-          title: titleInput.value.trim(),
-          url: normalizeUrl(urlInput.value),
-          category: categoryInput.value.trim(),
+          id: createId(),
+          title,
+          url: normalizeUrl(url),
+          category,
         });
 
         saveBookmarks();
